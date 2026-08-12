@@ -35,6 +35,7 @@ The pipeline consists of six main modules working together:
 *   `pyhmmer`
 *   `requests`
 *   `colabfold`
+*   `pyyaml`
 
 ### Install Dependencies
 ```bash
