@@ -1,0 +1,22 @@
+# config/cluster.yaml
+# Database paths and execution parameters for HPC cluster environment
+
+databases:
+  jackhmmer:
+    uniref90: '/data/shared/databases/uniref90/uniref90.fasta'
+    mgnify: '/data/shared/databases/mgnify/mgy_clusters.fasta'
+    swissprot: '/data/shared/databases/uniprot/uniprot_sprot.fasta'
+
+  hhblits:
+    uniclust30: '/data/shared/databases/uniclust30/uniclust30_2018_08'
+    pdb70: '/data/shared/databases/pdb70/pdb70'
+
+  mmseqs:
+    uniref30: '/data/shared/databases/mmseqs/uniref30_2302'
+    envdb: '/data/shared/databases/mmseqs/colabfold_envdb_202108'
+
+execution:
+  cpu_threads: 16
+  max_iterations: 3
+  # Set to path of local mmseqs binary if not using API
+  local_mmseqs_binary: 'mmseqs'
