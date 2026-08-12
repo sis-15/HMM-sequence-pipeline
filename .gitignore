@@ -1,0 +1,43 @@
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+*_env/
+*venv*/
+.env
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Temporary & Working Files
+_temp_*
+*.tmp
+
+# Common Bioinformatics Data & Output Extensions
+*.fasta
+*.fasta.gz
+*.a3m
+*.hmm
+*.sto
+
+# Ignore text files EXCEPT requirements.txt
+*.txt
+!requirements.txt
+
+# Specific & Wildcard Job Output Folders
+jackhmmer_*/
+mmseqs_*/
+dbcan_*/
+test_run*/
+1csm*/
+*_test/
+*_results/
+master_run/
+logs/
+
+# Local mounts / absolute paths (safeguard)
+/mnt/
