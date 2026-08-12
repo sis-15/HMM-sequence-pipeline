@@ -38,6 +38,7 @@ test_run*/
 *_results/
 master_run/
 logs/
+/old
 
 # Local mounts / absolute paths (safeguard)
 /mnt/
