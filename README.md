@@ -39,7 +39,7 @@ The pipeline consists of six main modules working together:
 
 ### Install Dependencies
 ```bash
-pip install pyhmmer requests colabfold
+pip install pyhmmer requests colabfold pyyaml
 ```
 
 # 3. Command Line Parameters
