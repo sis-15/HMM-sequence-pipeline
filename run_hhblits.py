@@ -49,7 +49,10 @@ def run_hhblits_api(
         query_seq = seq_file.read()
 
     # Read original query header/sequence string
-    query_name = query_seq.name.decode("utf-8") if query_seq.name else "query"
+    if hasattr(query_seq, "name") and query_seq.name:
+        query_name = query_seq.name.decode("utf-8") if isinstance(query_seq.name, bytes) else str(query_seq.name)
+    else:
+        query_name = "query"
     query_text_seq = query_seq.sequence
 
     # 3. Read target HMM database and execute hmmscan
