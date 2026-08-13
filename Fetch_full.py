@@ -1,3 +1,4 @@
+from typing import Tuple, Optional
 import concurrent.futures
 import os
 import re
@@ -46,7 +47,7 @@ def extract_accessions_from_a3m(a3m_path: str) -> list[str]:
 
 
 # Retrieve Full Native Sequences
-def fetch_single_sequence(acc: str) -> tuple[str, str | None]:
+def fetch_single_sequence(acc: str) -> Tuple[str, Optional[str]]:
     session = get_session()
     urls = [
         f"https://rest.uniprot.org/uniprotkb/{acc}.fasta",

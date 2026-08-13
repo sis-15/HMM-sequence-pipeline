@@ -280,6 +280,7 @@ Thumbs.db
 # Temporary & Working Files
 _temp_*
 *.tmp
+*.png
 
 # Common Bioinformatics Data & Output Extensions
 *.fasta
@@ -288,6 +289,8 @@ _temp_*
 *.hmm
 *.sto
 run.sh
+*.yaml
+*.sh
 
 # Ignore text files EXCEPT requirements.txt
 *.txt
