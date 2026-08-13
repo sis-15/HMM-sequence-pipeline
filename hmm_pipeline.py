@@ -4,8 +4,6 @@ import sys
 import shlex
 import yaml
 
-from run_jackhmmer import run_jackhmmer_api
-from run_hhblits import run_hhblits_api
 from Fetch_full import fetch_full_sequences_from_hits
 from merge_a3m import combine_a3m_files
 
@@ -125,6 +123,7 @@ def main():
             use_streaming = args.stream or (config and config.get("execution", {}).get("stream", False))
             
             if tool == "jackhmmer":
+                from run_jackhmmer import run_jackhmmer_api
                 hits, _ = run_jackhmmer_api(
                     sequence=query_seq,
                     database=db_path,
@@ -136,6 +135,7 @@ def main():
                 all_hit_ids.extend(hits)
 
             elif tool == "hhblits":
+                from run_hhblits import run_hhblits_api
                 hits, _ = run_hhblits_api(
                     sequence=query_seq,
                     database=db_path,
