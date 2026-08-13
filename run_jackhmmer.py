@@ -22,6 +22,7 @@ def run_jackhmmer_api(
     query_file: str = "1csm.fasta",
     output_a3m_path: str = None,
     stream: bool = False,
+    cpus: int = 8,
 ) -> tuple[list[str], str]:
     """
     Runs local PyHMMER Jackhmmer directly against a target FASTA file.
@@ -62,34 +63,18 @@ def run_jackhmmer_api(
 
     # 3. Execute PyHMMER Jackhmmer
     print(
-        f"--> Executing local Jackhmmer against '{target_db}' ({iterations} iterations, stream={stream})..."
+        f"--> Executing local Jackhmmer against '{target_db}' ({iterations} iterations, cpus={cpus})..."
     )
 
+    # Stream target database directly via PyHMMER SequenceFile handle
+    # (Avoids converting/extending into a massive Python list in memory)
     with SequenceFile(target_db, digital=True) as db_file:
-        if stream:
-            # For massive DBs (UniRef90), read in fixed sequence blocks (10,000 seqs per block)
-            # to keep memory footprint under ~1-2 GB
-            sequences = []
-            while True:
-                block = db_file.read_block(sequences=10000)
-                if not block:
-                    break
-                sequences.extend(block)
-
-            jackhmmer_result = pyhmmer.hmmer.jackhmmer(
-                query_seq,
-                sequences,
-                cpus=4,
-                max_iterations=iterations,
-            )
-        else:
-            # Fast path for small/medium DBs (SwissProt, Pfam)
-            jackhmmer_result = pyhmmer.hmmer.jackhmmer(
-                query_seq,
-                db_file,
-                cpus=4,
-                max_iterations=iterations,
-            )
+        jackhmmer_result = pyhmmer.hmmer.jackhmmer(
+            query_seq,
+            db_file,
+            cpus=cpus,
+            max_iterations=iterations,
+        )
 
     # 4. Extract Hits and MSA Alignment
     accessions = []
