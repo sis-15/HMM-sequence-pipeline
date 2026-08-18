@@ -307,6 +307,9 @@ test_run*/
 master_run/
 logs/
 /old
+*.xlsx
+*.csv
+*.svg
 
 # Local mounts / absolute paths (safeguard)
 /mnt/
