@@ -1,6 +1,7 @@
 import os
 import re
 import subprocess
+import tempfile
 
 RE_PREFIX = re.compile(r"^UniRef\d+_")
 
@@ -14,23 +15,47 @@ def extract_clean_acc(token: str) -> str:
     return acc if len(acc) >= 6 and not acc.isdigit() else ""
 
 
+def parse_fasta_records(fasta_path: str) -> list[tuple[str, str]]:
+    """Parses a multi-FASTA file into a list of (header, sequence) tuples."""
+    records = []
+    current_header = None
+    current_seq = []
+
+    with open(fasta_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith(">"):
+                if current_header:
+                    records.append((current_header, "".join(current_seq)))
+                current_header = line
+                current_seq = []
+            else:
+                current_seq.append(line)
+        if current_header:
+            records.append((current_header, "".join(current_seq)))
+
+    return records
+
+
 def run_hhblits_api(
     sequence: str = "",
     database: str = "",
     iterations: int = 3,
     query_file: str = "1csm.fasta",
     output_a3m_path: str = "hhblits_out.a3m",
-    cpus: int = 16,
+    cpus: int = 8,
 ) -> tuple[list[str], str]:
     """
-    Runs actual HHblits via subprocess against HH-suite binary databases (.ffdata / .ffindex).
-    Returns a tuple of (unique_accession_ids, a3m_alignment_string).
+    Runs HHblits via subprocess against HH-suite binary databases (.ffdata / .ffindex).
+    Handles multi-sequence FASTA files by looping per sequence.
+    Returns a tuple of (unique_accession_ids, aggregated_a3m_alignment_string).
     """
-    # 1. Resolve Query Sequence File
+    # 1. Extract sequence records
     if os.path.exists(query_file):
-        query_path = query_file
+        records = parse_fasta_records(query_file)
     else:
-        query_path = "_temp_query.fasta"
         clean_seq = "".join(
             [
                 l.strip()
@@ -38,61 +63,79 @@ def run_hhblits_api(
                 if not l.startswith(">")
             ]
         )
-        with open(query_path, "w") as f:
-            f.write(f">query\n{clean_seq}\n")
+        records = [(">query", clean_seq)]
 
-    # Determine destination for output A3M
     a3m_out = output_a3m_path if output_a3m_path else "hhblits_out.a3m"
     os.makedirs(os.path.dirname(os.path.abspath(a3m_out)), exist_ok=True)
 
-    # 2. Build and execute HHblits CLI command
-    cmd = [
-        "hhblits",
-        "-i",
-        query_path,
-        "-d",
-        database,
-        "-n",
-        str(iterations),
-        "-cpu",
-        str(cpus),
-        "-oa3m",
-        a3m_out,
-    ]
-
-    print(f"--> Executing HHblits CLI: {' '.join(cmd)}")
-    try:
-        res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-    except FileNotFoundError:
-        raise RuntimeError(
-            "HHblits binary not found in PATH! Ensure 'module load hhsuite' is in your submit_job.sh."
-        )
-    except subprocess.CalledProcessError as e:
-        print(f"HHblits STDOUT:\n{e.stdout}")
-        print(f"HHblits STDERR:\n{e.stderr}")
-        raise e
-
-    # 3. Parse generated A3M file to extract accessions and raw alignment string
-    accessions = []
-    a3m_string = ""
-
+    # Clear target output file if it already exists
     if os.path.exists(a3m_out):
-        with open(a3m_out, "r", encoding="utf-8") as f:
-            a3m_string = f.read()
+        os.remove(a3m_out)
 
-        for line in a3m_string.splitlines():
-            if line.startswith(">"):
-                acc = extract_clean_acc(line)
-                if acc:
-                    accessions.append(acc)
+    all_accessions = []
+    aggregated_a3m_lines = []
 
-    # Clean up temporary query file if created
-    if query_path == "_temp_query.fasta" and os.path.exists("_temp_query.fasta"):
-        os.remove("_temp_query.fasta")
+    # 2. Loop through each sequence individually
+    for idx, (header, seq) in enumerate(records, start=1):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".fasta", delete=False) as tmp_f:
+            tmp_f.write(f"{header}\n{seq}\n")
+            tmp_query_path = tmp_f.name
+
+        tmp_a3m_out = f"{a3m_out}.seq_{idx}.tmp"
+
+        cmd = [
+            "hhblits",
+            "-i",
+            tmp_query_path,
+            "-d",
+            database,
+            "-n",
+            str(iterations),
+            "-cpu",
+            str(cpus),
+            "-oa3m",
+            tmp_a3m_out,
+        ]
+
+        print(f"--> [HHblits {idx}/{len(records)}] Executing CLI for {header.split()[0]}...")
+        try:
+            subprocess.run(cmd, capture_output=True, text=True, check=True)
+        except FileNotFoundError:
+            if os.path.exists(tmp_query_path):
+                os.remove(tmp_query_path)
+            raise RuntimeError(
+                "HHblits binary not found in PATH! Ensure PATH contains HH-suite."
+            )
+        except subprocess.CalledProcessError as e:
+            print(f"HHblits STDOUT:\n{e.stdout}")
+            print(f"HHblits STDERR:\n{e.stderr}")
+            if os.path.exists(tmp_query_path):
+                os.remove(tmp_query_path)
+            raise e
+        finally:
+            if os.path.exists(tmp_query_path):
+                os.remove(tmp_query_path)
+
+        # 3. Parse individual result A3M
+        if os.path.exists(tmp_a3m_out):
+            with open(tmp_a3m_out, "r", encoding="utf-8") as f:
+                content = f.read()
+                aggregated_a3m_lines.append(content)
+                for line in content.splitlines():
+                    if line.startswith(">"):
+                        acc = extract_clean_acc(line)
+                        if acc:
+                            all_accessions.append(acc)
+            os.remove(tmp_a3m_out)
+
+    # 4. Save combined A3M file
+    full_a3m_string = "\n".join(aggregated_a3m_lines)
+    with open(a3m_out, "w", encoding="utf-8") as f:
+        f.write(full_a3m_string)
 
     # Deduplicate keeping order
     seen = set()
-    unique_accs = [a for a in accessions if not (a in seen or seen.add(a))]
-    print(f"[HHblits CLI] Retrieved {len(unique_accs)} unique hit IDs.")
+    unique_accs = [a for a in all_accessions if not (a in seen or seen.add(a))]
+    print(f"[HHblits CLI] Finished {len(records)} sequences. Retrieved {len(unique_accs)} unique hit IDs.")
 
-    return unique_accs, a3m_string
+    return unique_accs, full_a3m_string
