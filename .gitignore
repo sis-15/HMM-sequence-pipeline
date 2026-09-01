@@ -312,4 +312,4 @@ logs/
 *.svg
 
 # Local mounts / absolute paths (safeguard)
-/mnt/
+/mnt/config/cluster.yaml

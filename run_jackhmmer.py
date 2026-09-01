@@ -1,52 +1,53 @@
 import os
 import re
-import pyhmmer
-from pyhmmer.easel import SequenceFile
-
-RE_PREFIX = re.compile(r"^UniRef\d+_")
+import subprocess
 
 
-def extract_clean_acc(token: str) -> str:
-    """Extracts a valid UniProt accession from hit header tokens."""
-    token = RE_PREFIX.sub("", token.lstrip(">").strip())
-    parts = token.split("|")
-    acc = parts[-1] if len(parts) > 1 else parts[0]
-    acc = acc.split("/")[0].split(".")[0]
-    return acc if len(acc) >= 6 and not acc.isdigit() else ""
+def extract_acc_from_jackhmmer(target_name: str, target_accession: str) -> str:
+    """Extracts a clean accession from jackhmmer target_name or target_accession columns."""
+    # 1. Prefer target_accession if it's a valid UniProt ID (e.g., Q9Y6X5)
+    if target_accession and target_accession != "-":
+        acc = target_accession.split(".")[0].split("/")[0]
+        if len(acc) >= 6:
+            return acc
+
+    # 2. Parse target_name (e.g., sp|P12345|NAME or UniRef90_P12345)
+    clean_name = re.sub(r"^UniRef\d+_", "", target_name)
+    parts = clean_name.split("|")
+    
+    # Check middle or last item if pipe-separated (e.g. tr|A0A024RBG1|...)
+    for p in parts:
+        token = p.split(".")[0].split("/")[0]
+        if len(token) >= 6 and not token.isdigit():
+            return token
+
+    return target_name.split(".")[0]
 
 
 def run_jackhmmer_api(
     sequence: str = "",
-    database: str = "/mnt/d/bio_databases/uniref90.fasta",
+    database: str = "",
     iterations: int = 3,
-    query_file: str = "1csm.fasta",
-    output_a3m_path: str = None,
-    stream: bool = False,
-    cpus: int = 8,
+    query_file: str = "",
+    output_tbl_path: str = "jackhmmer_out.tbl",
+    cpus: int = 16,  # Matches cpu_threads in config/cluster.yaml
+    extra_flags: str = "",
 ) -> tuple[list[str], str]:
     """
-    Runs local PyHMMER Jackhmmer directly against a target FASTA file.
-    Supports stream=True for large databases (e.g. UniRef90) to prevent RAM AllocationErrors.
-    Returns a tuple of (unique_accession_ids, a3m_alignment_string).
+    Runs jackhmmer via subprocess against a sequence database FASTA.
+    Returns a tuple of (unique_accession_ids, raw_tblout_string).
     """
-    # 1. Resolve target database path
-    target_db = database
-    if not os.path.exists(target_db):
-        if os.path.exists("uniprot_sprot.fasta"):
-            target_db = "uniprot_sprot.fasta"
-            print(
-                f"--> Target '{database}' not found. Falling back to local 'uniprot_sprot.fasta'..."
-            )
-        else:
-            raise FileNotFoundError(
-                f"Target database file not found at: {database}"
-            )
+    # 1. Verify Target Database Path
+    if not database or not os.path.exists(database):
+        raise FileNotFoundError(
+            f"Target database file not found at: {database}"
+        )
 
-    # 2. Prepare Query Sequence
-    if os.path.exists(query_file):
+    # 2. Resolve Query Sequence File
+    if query_file and os.path.exists(query_file):
         query_path = query_file
     else:
-        query_path = "_temp_query.fasta"
+        query_path = "_temp_jackhmmer_query.fasta"
         clean_seq = "".join(
             [
                 l.strip()
@@ -57,90 +58,64 @@ def run_jackhmmer_api(
         with open(query_path, "w") as f:
             f.write(f">query\n{clean_seq}\n")
 
-    print(f"--> Reading query sequence from '{query_path}'...")
-    with SequenceFile(query_path, digital=True) as seq_file:
-        query_seq = seq_file.read()
+    tbl_out = output_tbl_path if output_tbl_path else "jackhmmer_out.tbl"
+    os.makedirs(os.path.dirname(os.path.abspath(tbl_out)), exist_ok=True)
 
-    # 3. Execute PyHMMER Jackhmmer
-    print(
-        f"--> Executing local Jackhmmer against '{target_db}' ({iterations} iterations, cpus={cpus})..."
-    )
+    # 3. Build Command
+    cmd = [
+        "jackhmmer",
+        "-N",
+        str(iterations),
+        "--cpu",
+        str(cpus),
+        "--tblout",
+        tbl_out,
+    ]
 
-    # Stream target database directly via PyHMMER SequenceFile handle
-    # (Avoids converting/extending into a massive Python list in memory)
-    with SequenceFile(target_db, digital=True) as db_file:
-        jackhmmer_result = pyhmmer.hmmer.jackhmmer(
-            query_seq,
-            db_file,
-            cpus=cpus,
-            max_iterations=iterations,
+    # Append any extra flags from config (e.g. --F1 0.05)
+    if extra_flags:
+        cmd.extend(extra_flags.split())
+
+    cmd.extend([query_path, database])
+
+    print(f"--> Executing Jackhmmer CLI: {' '.join(cmd)}")
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except FileNotFoundError:
+        raise RuntimeError(
+            "jackhmmer binary not found in PATH! Ensure HMMER is loaded or in environment."
         )
+    except subprocess.CalledProcessError as e:
+        print(f"jackhmmer STDOUT:\n{e.stdout}")
+        print(f"jackhmmer STDERR:\n{e.stderr}")
+        raise e
 
-    # 4. Extract Hits and MSA Alignment
+    # 4. Parse Generated `--tblout` File
     accessions = []
-    last_iteration = None
+    tbl_string = ""
 
-    if hasattr(jackhmmer_result, "__iter__"):
-        all_iterations = list(jackhmmer_result)
-        if all_iterations:
-            last_iteration = all_iterations[-1]
-            hits_list = last_iteration.hits
-    else:
-        last_iteration = jackhmmer_result
-        hits_list = getattr(jackhmmer_result, "hits", None)
+    if os.path.exists(tbl_out):
+        with open(tbl_out, "r", encoding="utf-8") as f:
+            tbl_string = f.read()
 
-    if hits_list:
-        for hit in hits_list:
-            if getattr(hit, "included", True):
-                raw_name = hit.name
-                target_name = (
-                    raw_name.decode("utf-8")
-                    if isinstance(raw_name, bytes)
-                    else str(raw_name)
-                )
-                cleaned = extract_clean_acc(target_name)
-                if cleaned:
-                    accessions.append(cleaned)
+        for line in tbl_string.splitlines():
+            if line.startswith("#") or not line.strip():
+                continue
+            parts = line.split()
+            if len(parts) >= 2:
+                target_name = parts[0]
+                target_acc = parts[1]
+                acc = extract_acc_from_jackhmmer(target_name, target_acc)
+                if acc:
+                    accessions.append(acc)
 
-    # 5. Extract A3M alignment string from final MSA iteration
-    a3m_string = ""
-    if last_iteration:
-        msa = getattr(last_iteration, "msa", None)
-        if msa is None and hasattr(last_iteration, "to_msa"):
-            msa = last_iteration.to_msa()
+    # Clean temporary query file if created
+    if query_path == "_temp_jackhmmer_query.fasta" and os.path.exists("_temp_jackhmmer_query.fasta"):
+        os.remove("_temp_jackhmmer_query.fasta")
 
-        if msa is not None:
-            a3m_lines = []
-            for seq in msa.sequences:
-                seq_name = (
-                    seq.name.decode("utf-8")
-                    if isinstance(seq.name, bytes)
-                    else str(seq.name)
-                )
-                if hasattr(seq, "text_sequence"):
-                    seq_str = seq.text_sequence()
-                else:
-                    seq_str = str(seq)
-
-                seq_str = seq_str.replace(".", "-")
-                a3m_lines.append(f">{seq_name}\n{seq_str}")
-
-            a3m_string = "\n".join(a3m_lines) + "\n"
-
-    # 6. Save A3M file if output path is requested
-    if output_a3m_path and a3m_string:
-        os.makedirs(
-            os.path.dirname(os.path.abspath(output_a3m_path)), exist_ok=True
-        )
-        with open(output_a3m_path, "w", encoding="utf-8") as f:
-            f.write(a3m_string)
-
-    # Clean up temporary query file
-    if query_path == "_temp_query.fasta" and os.path.exists("_temp_query.fasta"):
-        os.remove("_temp_query.fasta")
-
+    # Deduplicate keeping order
     seen = set()
     unique_accs = [a for a in accessions if not (a in seen or seen.add(a))]
-    print(f"[Jackhmmer Local] Retrieved {len(unique_accs)} unique hit IDs.")
+    print(f"[Jackhmmer CLI] Retrieved {len(unique_accs)} unique hit IDs.")
 
-    return unique_accs, a3m_string
+    return unique_accs, tbl_string

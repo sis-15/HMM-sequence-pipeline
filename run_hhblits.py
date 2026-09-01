@@ -18,16 +18,16 @@ def run_hhblits_api(
     sequence: str = "",
     database: str = "",
     iterations: int = 3,
-    query_file: str = "1csm.fasta",
+    query_file: str = "",
     output_a3m_path: str = "hhblits_out.a3m",
-    cpus: int = 16,
+    cpus: int = 16,  # Match cpu_threads from config/cluster.yaml
 ) -> tuple[list[str], str]:
     """
     Runs actual HHblits via subprocess against HH-suite binary databases (.ffdata / .ffindex).
     Returns a tuple of (unique_accession_ids, a3m_alignment_string).
     """
     # 1. Resolve Query Sequence File
-    if os.path.exists(query_file):
+    if query_file and os.path.exists(query_file):
         query_path = query_file
     else:
         query_path = "_temp_query.fasta"
@@ -56,6 +56,8 @@ def run_hhblits_api(
         str(iterations),
         "-cpu",
         str(cpus),
+        "-M",
+        "first",  # Prevents memory alignment/AVX errors on Longleaf nodes
         "-oa3m",
         a3m_out,
     ]
@@ -65,7 +67,7 @@ def run_hhblits_api(
         res = subprocess.run(cmd, capture_output=True, text=True, check=True)
     except FileNotFoundError:
         raise RuntimeError(
-            "HHblits binary not found in PATH! Ensure 'module load hhsuite' is in your submit_job.sh."
+            "HHblits binary not found in PATH! Ensure PATH includes hhsuite."
         )
     except subprocess.CalledProcessError as e:
         print(f"HHblits STDOUT:\n{e.stdout}")
@@ -86,7 +88,7 @@ def run_hhblits_api(
                 if acc:
                     accessions.append(acc)
 
-    # Clean up temporary query file if created
+    # Clean up temporary query file if created on the fly
     if query_path == "_temp_query.fasta" and os.path.exists("_temp_query.fasta"):
         os.remove("_temp_query.fasta")
 
