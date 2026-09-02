@@ -20,7 +20,8 @@ def run_hhblits_api(
     iterations: int = 3,
     query_file: str = "",
     output_a3m_path: str = "hhblits_out.a3m",
-    cpus: int = 16,  # Match cpu_threads from config/cluster.yaml
+    stream: bool = False,
+    cpus: int = 8,
 ) -> tuple[list[str], str]:
     """
     Runs actual HHblits via subprocess against HH-suite binary databases (.ffdata / .ffindex).
@@ -79,8 +80,8 @@ def run_hhblits_api(
     a3m_string = ""
 
     if os.path.exists(a3m_out):
-        with open(a3m_out, "r", encoding="utf-8") as f:
-            a3m_string = f.read()
+        with open(a3m_out, "r", encoding="utf-8", errors="ignore") as f:
+            a3m_string = f.read()  # Read full content for the return string
 
         for line in a3m_string.splitlines():
             if line.startswith(">"):

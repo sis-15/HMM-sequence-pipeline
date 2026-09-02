@@ -1,10 +1,11 @@
-import os
 import argparse
+import os
 from typing import List, Tuple
 
-def parse_a3m(file_path: str) -> Tuple[str, list[tuple[str, str]]]:
-    """
-    Parses an A3M file into (query_header, query_seq) and a list of 
+
+def parse_a3m(file_path: str) -> Tuple[Tuple[str, str], list[tuple[str, str]]]:
+    """Parses an A3M file into (query_header, query_seq) tuple and a list of
+
     aligned records: [(header, sequence), ...].
     """
     records = []
@@ -18,7 +19,9 @@ def parse_a3m(file_path: str) -> Tuple[str, list[tuple[str, str]]]:
                 continue
             if line.startswith(">"):
                 if current_header is not None:
-                    records.append((current_header, "".join(current_seq_parts)))
+                    records.append(
+                        (current_header, "".join(current_seq_parts))
+                    )
                 current_header = line
                 current_seq_parts = []
             else:
@@ -28,7 +31,7 @@ def parse_a3m(file_path: str) -> Tuple[str, list[tuple[str, str]]]:
             records.append((current_header, "".join(current_seq_parts)))
 
     if not records:
-        return "", []
+        return ("", ""), []
 
     query_record = records[0]
     aligned_records = records[1:]
@@ -36,34 +39,43 @@ def parse_a3m(file_path: str) -> Tuple[str, list[tuple[str, str]]]:
 
 
 def combine_a3m_files(
-    input_files: List[str], 
-    output_path: str, 
-    filter_unique_seqs: bool = True
+    input_files: List[str], output_path: str, filter_unique_seqs: bool = True
 ) -> str:
-    """
-    Merges multiple A3M files into one master alignment.
-    
-    1. Keeps the first sequence as the primary query sequence (Row 1).
+    """Merges multiple A3M files into one master alignment.
+
+    1. Keeps the first valid sequence as the primary query sequence (Row 1).
     2. Collects all aligned hits across input files.
     3. Deduplicates hit sequences while preserving order.
     4. Writes the unified alignment to `output_path`.
     """
-    valid_files = [f for f in input_files if os.path.exists(f) and os.path.getsize(f) > 0]
-    
+    valid_files = [
+        f for f in input_files if os.path.exists(f) and os.path.getsize(f) > 0
+    ]
+
     if not valid_files:
-        raise FileNotFoundError("None of the specified input A3M files exist or are non-empty.")
+        raise FileNotFoundError(
+            "None of the specified input A3M files exist or are non-empty."
+        )
 
     print(f"--> Merging {len(valid_files)} A3M alignment file(s)...")
 
-    # Read primary query from the first valid file
-    primary_query, primary_hits = parse_a3m(valid_files[0])
-    
-    all_hits = list(primary_hits)
-    
-    # Process remaining files
-    for file_path in valid_files[1:]:
-        _, hits = parse_a3m(file_path)
+    primary_query = None
+    all_hits = []
+
+    # Iterate through valid files to extract primary query and hits
+    for file_path in valid_files:
+        q_rec, hits = parse_a3m(file_path)
+
+        # Take the first valid non-empty query record found across files
+        if primary_query is None and q_rec and q_rec[0] and q_rec[1]:
+            primary_query = q_rec
+
         all_hits.extend(hits)
+
+    if primary_query is None:
+        raise ValueError(
+            "Could not extract a valid primary query header and sequence from any input A3M file."
+        )
 
     # Deduplicate entries based on sequence
     seen_sequences = set()
@@ -71,13 +83,15 @@ def combine_a3m_files(
 
     if filter_unique_seqs:
         for header, seq in all_hits:
+            if not header or not seq:
+                continue
             # Normalize sequence representation for comparison
             normalized_seq = seq.upper()
             if normalized_seq not in seen_sequences:
                 seen_sequences.add(normalized_seq)
                 deduplicated_hits.append((header, seq))
     else:
-        deduplicated_hits = all_hits
+        deduplicated_hits = [(h, s) for h, s in all_hits if h and s]
 
     # Format master A3M
     output_lines = [f"{primary_query[0]}\n{primary_query[1]}"]
@@ -98,28 +112,32 @@ def combine_a3m_files(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Merge multiple A3M files into a master AlphaFold alignment.")
-    parser.add_argument(
-        "-i", "--input", 
-        nargs="+", 
-        required=True, 
-        help="Space-separated paths to input A3M files (e.g. jack.a3m hh.a3m mmseqs.a3m)"
+    parser = argparse.ArgumentParser(
+        description="Merge multiple A3M files into a master AlphaFold alignment."
     )
     parser.add_argument(
-        "-o", "--output", 
-        required=True, 
-        help="Path where the merged master A3M file will be saved"
+        "-i",
+        "--input",
+        nargs="+",
+        required=True,
+        help="Space-separated paths to input A3M files (e.g. jack.a3m hh.a3m mmseqs.a3m)",
     )
     parser.add_argument(
-        "--keep-duplicates", 
-        action="store_true", 
-        help="Do not deduplicate identical aligned sequences across files"
+        "-o",
+        "--output",
+        required=True,
+        help="Path where the merged master A3M file will be saved",
+    )
+    parser.add_argument(
+        "--keep-duplicates",
+        action="store_true",
+        help="Do not deduplicate identical aligned sequences across files",
     )
 
     args = parser.parse_args()
 
     combine_a3m_files(
-        input_files=args.input, 
-        output_path=args.output, 
-        filter_unique_seqs=not args.keep_duplicates
+        input_files=args.input,
+        output_path=args.output,
+        filter_unique_seqs=not args.keep_duplicates,
     )

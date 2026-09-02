@@ -14,7 +14,7 @@ def extract_acc_from_jackhmmer(target_name: str, target_accession: str) -> str:
     # 2. Parse target_name (e.g., sp|P12345|NAME or UniRef90_P12345)
     clean_name = re.sub(r"^UniRef\d+_", "", target_name)
     parts = clean_name.split("|")
-    
+
     # Check middle or last item if pipe-separated (e.g. tr|A0A024RBG1|...)
     for p in parts:
         token = p.split(".")[0].split("/")[0]
@@ -30,7 +30,9 @@ def run_jackhmmer_api(
     iterations: int = 3,
     query_file: str = "",
     output_tbl_path: str = "jackhmmer_out.tbl",
-    cpus: int = 16,  # Matches cpu_threads in config/cluster.yaml
+    output_a3m_path: str = None,
+    stream: bool = False,
+    cpus: int = 8,
     extra_flags: str = "",
 ) -> tuple[list[str], str]:
     """
@@ -72,6 +74,11 @@ def run_jackhmmer_api(
         tbl_out,
     ]
 
+    # Optional alignment output (-A)
+    if output_a3m_path:
+        os.makedirs(os.path.dirname(os.path.abspath(output_a3m_path)), exist_ok=True)
+        cmd.extend(["-A", output_a3m_path])
+
     # Append any extra flags from config (e.g. --F1 0.05)
     if extra_flags:
         cmd.extend(extra_flags.split())
@@ -95,7 +102,7 @@ def run_jackhmmer_api(
     tbl_string = ""
 
     if os.path.exists(tbl_out):
-        with open(tbl_out, "r", encoding="utf-8") as f:
+        with open(tbl_out, "r", encoding="utf-8", errors="ignore") as f:
             tbl_string = f.read()
 
         for line in tbl_string.splitlines():
@@ -103,9 +110,7 @@ def run_jackhmmer_api(
                 continue
             parts = line.split()
             if len(parts) >= 2:
-                target_name = parts[0]
-                target_acc = parts[1]
-                acc = extract_acc_from_jackhmmer(target_name, target_acc)
+                acc = extract_acc_from_jackhmmer(parts[0], parts[1])
                 if acc:
                     accessions.append(acc)
 
