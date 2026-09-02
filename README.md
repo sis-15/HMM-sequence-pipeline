@@ -15,6 +15,7 @@ The pipeline consists of six main modules working together:
 * **`Fetch_full.py`**: Accepts matching accession IDs from search steps and downloads full native protein sequences directly from the UniProt API into standard FASTA format.
 * **`merge_a3m.py`**: Combines multiple `.a3m` alignment files, preserves the primary query sequence as Row 1, deduplicates identical aligned sequences, and builds the Master A3M alignment for AlphaFold.
 * **`merge_fastas.py`**: A fast, linear-time utility that merges and deduplicates unaligned sequences from multiple search streams into a single Master FASTA file while preserving the query sequence at Row 1.
+* **`visualize.py`**: A memory-efficient streaming visualizer for giant A3M alignments. Uses `Bio.SeqIO` to compute positional amino acid frequency matrices in constant memory. Generates multi-row wrapped Logomaker sequence logos (standard and grouped physical properties) and exports individual per-residue amino acid frequency histograms (`seq_<id>_residue_<pos>.png`).
 
 1. **Query Input:** `1csm.fasta`
 2. **Parallel Searches:**
@@ -36,10 +37,13 @@ The pipeline consists of six main modules working together:
 *   `requests`
 *   `colabfold`
 *   `pyyaml`
+*   `matplotlib`
+*   `logomaker`
+*   `biopython`
 
 ### Install Dependencies
 ```bash
-pip install pyhmmer requests colabfold pyyaml
+pip install pyhmmer requests colabfold pyyaml matplotlib logomaker biopython
 ```
 
 # 3. Command Line Parameters
@@ -66,6 +70,21 @@ pip install pyhmmer requests colabfold pyyaml
 | `-i, --input` | `string list` | **Yes** | — | Space-separated paths to input .a3m files to merge. |
 | `-o, --output` | `string` | **Yes** | — | Destination path for the master `.a3m` alignment file. |
 | `--keep-duplicates` | `flag` | No | `False` | Disables deduplication of identical hit sequences across inputs. |
+
+### Sequence & Residue Visualizer (visualize.py)
+| Parameter | Type | Required | Default | Description |
+| :--- | :--- | :---: | :--- | :--- |
+| `-i, --input` | `string` | **Yes** | — | Path to input `.a3m` alignment file. |
+| `-o, --output` | `string` | No | `msa_logo.png` | Output path for the sequence logo plot. |
+| `--seq-id` | `string` | No | `X` | Sequence identifier used for histogram file naming (e.g., `1391`). |
+| `--logo` | `flag` | No | `False`* | Generates Logomaker sequence logos (Standard + Grouped properties). |
+| `--histogram` | `flag` | No | `False`* | Generates per-residue amino acid frequency histograms into `--hist-dir`. |
+| `--hist-dir` | `string` | No | `histograms` | Destination directory for output residue histogram images. |
+| `-c, --chunk-size` | `int` | No | `60` | Number of alignment positions displayed per row in logo outputs. |
+| `--width-per-pos` | `float` | No | `0.35` | Plot width scale in inches per position for sequence logos. |
+| `--row-height` | `float` | No | `2.5` | Plot height scale in inches per row for sequence logos. |
+
+*\*Note: If neither `--logo` nor `--histogram` is specified, the script defaults to running both.*
 
 # 4. Example Commands
 ### Runnning Jackhmmer Against Swiss-Prot
