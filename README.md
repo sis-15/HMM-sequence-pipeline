@@ -7,10 +7,10 @@ An automated AlphaFold-inspired sequence search and MSA pipeline. Generates A3M 
 A lightweight, local Python pipeline for bioinformatic sequence searches, native sequence retrieval, and multi-database sequence consolidation inspired by AlphaFold's sequence retrieval architecture.
 
 # Publications Related to this Repository
-[Attention Is All You Need](https://arxiv.org/abs/1706.03762)
-[Highly accurate protein structure prediction with AlphaFold](https://www.nature.com/articles/s41586-021-03819-2)
-[HHblits: lightning-fast iterative protein sequence searching by HMM-HMM alignment](https://pubmed.ncbi.nlm.nih.gov/22198341/)
-[Hidden Markov model speed heuristic and iterative HMM search procedure](https://pmc.ncbi.nlm.nih.gov/articles/PMC2931519/)
+* [Attention Is All You Need](https://arxiv.org/abs/1706.03762)
+* [Highly accurate protein structure prediction with AlphaFold](https://www.nature.com/articles/s41586-021-03819-2)
+* [HHblits: lightning-fast iterative protein sequence searching by HMM-HMM alignment](https://pubmed.ncbi.nlm.nih.gov/22198341/)
+* [Hidden Markov model speed heuristic and iterative HMM search procedure](https://pmc.ncbi.nlm.nih.gov/articles/PMC2931519/)
 
 # 1. Overview & Architecture
 The pipeline consists of six main modules working together:
