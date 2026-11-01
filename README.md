@@ -11,6 +11,7 @@ A lightweight, local Python pipeline for bioinformatic sequence searches, native
 * [Highly accurate protein structure prediction with AlphaFold](https://www.nature.com/articles/s41586-021-03819-2)
 * [HHblits: lightning-fast iterative protein sequence searching by HMM-HMM alignment](https://pubmed.ncbi.nlm.nih.gov/22198341/)
 * [Hidden Markov model speed heuristic and iterative HMM search procedure](https://pmc.ncbi.nlm.nih.gov/articles/PMC2931519/)
+* [MMseqs2 enables sensitive protein sequence searching for the analysis of massive data sets](https://www.nature.com/articles/nbt.3988)
 
 # 1. Overview & Architecture
 The pipeline consists of six main modules working together:
